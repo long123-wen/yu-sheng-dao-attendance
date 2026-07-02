@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>御绳道跳绳馆 - 教练请假统计系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"微软雅黑",sans-serif;}
+        body{background:#f5f7fa;padding:20px;}
+        .container{max-width:1200px;margin:0 auto;background:#fff;border-radius:10px;padding:30px;box-shadow:0 2px 15px #ddd;}
+        h1{text-align:center;color:#222;margin-bottom:10px;font-size:26px;}
+        .subtitle{text-align:center;color:#999;font-size:13px;margin-bottom:25px;}
+        .box{border:1px solid #eee;border-radius:8px;padding:20px;margin-bottom:25px;}
+        .title{font-size:18px;margin-bottom:18px;color:#333;font-weight:bold;}
+        .row{display:flex;flex-wrap:wrap;gap:15px;margin-bottom:15px;align-items:center;}
+        input,select,button{padding:9px 12px;border:1px solid #ccc;border-radius:5px;font-size:14px;}
+        button{background:#2b6cb0;color:#fff;border:none;cursor:pointer;transition:background .2s;}
+        button:hover{background:#235b99;}
+        button:disabled{background:#a0aec0;cursor:not-allowed;}
+        .redBtn{background:#e53e3e;}
+        .redBtn:hover{background:#c53030;}
+        .greenBtn{background:#38a169;}
+        .greenBtn:hover{background:#2f855a;}
+        .grayBtn{background:#718096;}
+        .grayBtn:hover{background:#5a6478;}
+        .filter-row{display:flex;gap:20px;align-items:center;margin-bottom:20px;flex-wrap:wrap;}
+        .stat-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:15px;margin:20px 0;}
+        .stat-item{background:#f8f9fa;padding:15px;border-radius:6px;text-align:center;}
+        .stat-item p{color:#666;font-size:14px;}
+        .stat-item span{font-size:24px;color:#2b6cb0;font-weight:bold;}
+        table{width:100%;border-collapse:collapse;margin-top:10px;}
+        th,td{border:1px solid #eee;padding:11px;text-align:center;font-size:14px;}
+        th{background:#f5f7fa;}
+        .empty{padding:30px;text-align:center;color:#999;}
+
+        /* 加载遮罩 */
+        #loadingOverlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:15px;}
+        #loadingOverlay .spinner{width:40px;height:40px;border:4px solid #e2e8f0;border-top-color:#2b6cb0;border-radius:50%;animation:spin 0.8s linear infinite;}
+        #loadingOverlay .text{color:#666;font-size:15px;}
+        #loadingOverlay .retry{margin-top:10px;padding:8px 20px;background:#2b6cb0;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:14px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+
+        /* 提示条 */
+        #toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:#333;color:#fff;padding:12px 28px;border-radius:8px;font-size:14px;z-index:9998;transition:transform 0.3s ease;box-shadow:0 4px 15px rgba(0,0,0,0.2);}
+        #toast.show{transform:translateX(-50%) translateY(0);}
+        #toast.success{background:#38a169;}
+        #toast.error{background:#e53e3e;}
+
+        /* 云端状态指示 */
+        .cloud-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#38a169;margin-left:8px;}
+        .cloud-dot{width:8px;height:8px;background:#38a169;border-radius:50%;display:inline-block;animation:pulse 2s infinite;}
+        @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+        /* 禁用遮罩时的按钮 */
+        .submitting{opacity:0.7;pointer-events:none;}
+
+        /* ===== 移动端适配 ===== */
+        /* 表格横向滚动容器 */
+        .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+        .table-scroll table{min-width:560px;}
+
+        @media (max-width: 768px){
+            body{padding:8px;}
+            .container{padding:16px;border-radius:8px;}
+            h1{font-size:20px;margin-bottom:6px;}
+            .subtitle{font-size:12px;margin-bottom:16px;}
+            .box{padding:14px;margin-bottom:16px;border-radius:6px;}
+            .title{font-size:16px;margin-bottom:12px;}
+
+            /* 表单元素全宽，触摸友好 */
+            .row{flex-direction:column;gap:10px;align-items:stretch;margin-bottom:10px;}
+            .row > *{width:100% !important;flex:none;}
+            .filter-row{flex-direction:column;gap:10px;align-items:stretch;}
+            .filter-row > *{width:100% !important;}
+            input,select,button{padding:12px;font-size:16px;width:100%;box-sizing:border-box;}
+            button{min-height:44px;}
+
+            /* 统计卡片 2 列布局 */
+            .stat-wrap{grid-template-columns:repeat(2,1fr);gap:8px;margin:14px 0;}
+            .stat-item{padding:12px 6px;}
+            .stat-item p{font-size:12px;}
+            .stat-item span{font-size:20px;}
+
+            /* 表格小字号，允许横向滚动 */
+            th,td{padding:8px 6px;font-size:12px;white-space:nowrap;}
+            th{position:sticky;top:0;z-index:1;}
+
+            /* 提示条更窄 */
+            #toast{font-size:13px;padding:10px 20px;max-width:90%;}
+        }
+        @media (max-width: 380px){
+            .stat-wrap{grid-template-columns:repeat(2,1fr);}
+            .stat-item span{font-size:18px;}
+            h1{font-size:18px;}
+        }
+
+        /* ===== 登录界面 ===== */
+        #loginPage{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#2b6cb0 0%,#1a365d 100%);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;}
+        .login-card{background:#fff;border-radius:12px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,0.2);}
+        .login-card h2{text-align:center;color:#222;font-size:22px;margin-bottom:8px;}
+        .login-card .login-sub{text-align:center;color:#999;font-size:13px;margin-bottom:20px;}
+        .login-tabs{display:flex;background:#f1f3f5;border-radius:8px;padding:4px;margin-bottom:24px;}
+        .login-tab{flex:1;text-align:center;padding:9px 0;font-size:14px;color:#666;cursor:pointer;border-radius:6px;transition:all .2s;user-select:none;}
+        .login-tab.active{background:#2b6cb0;color:#fff;font-weight:500;box-shadow:0 2px 6px rgba(43,108,176,0.3);}
+        .login-card .form-group{margin-bottom:16px;}
+        .login-card label{display:block;color:#555;font-size:14px;margin-bottom:6px;font-weight:500;}
+        .login-card input{width:100%;padding:12px 14px;border:1px solid #ccc;border-radius:6px;font-size:15px;box-sizing:border-box;transition:border-color .2s;}
+        .login-card input:focus{outline:none;border-color:#2b6cb0;}
+        .login-card button{width:100%;padding:13px;background:#2b6cb0;color:#fff;border:none;border-radius:6px;font-size:16px;font-weight:500;cursor:pointer;margin-top:8px;transition:background .2s;}
+        .login-card button:hover{background:#235b99;}
+        .login-card button:disabled{background:#a0aec0;cursor:not-allowed;}
+        .login-card .err-msg{color:#e53e3e;font-size:13px;text-align:center;margin-top:10px;min-height:18px;}
+        .login-card .brand{text-align:center;color:#aaa;font-size:12px;margin-top:20px;}
+
+        /* 顶部用户信息条 */
+        .user-bar{display:flex;align-items:center;justify-content:space-between;background:#f8f9fa;padding:10px 16px;border-radius:6px;margin-bottom:20px;font-size:14px;flex-wrap:wrap;gap:8px;}
+        .user-bar .user-info{display:flex;align-items:center;gap:8px;color:#555;}
+        .user-bar .logout-btn{background:#718096;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;}
+        .user-bar .logout-btn:hover{background:#5a6478;}
+
+        /* 角色徽章 */
+        .role-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:500;}
+        .role-admin{background:#2b6cb0;color:#fff;}
+        .role-coach{background:#38a169;color:#fff;}
+
+        /* 教练视图下的灰色禁用提示 */
+        .coach-only-hint{font-size:12px;color:#999;margin-top:6px;text-align:center;}
+
+        @media (max-width: 480px){
+            .login-card{padding:28px 22px;}
+            .login-card h2{font-size:20px;}
+            .user-bar{font-size:13px;padding:8px 12px;}
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录页面 -->
+    <div id="loginPage">
+        <div class="login-card">
+            <h2 id="loginTitle">🔒 管理员登录</h2>
+            <div class="login-sub" id="loginSub">御绳道跳绳馆 · 请假统计系统</div>
+
+            <!-- 角色切换 Tab -->
+            <div class="login-tabs">
+                <div class="login-tab active" data-role="admin" onclick="switchLoginTab('admin')">管理员</div>
+                <div class="login-tab" data-role="coach" onclick="switchLoginTab('coach')">教练</div>
+            </div>
+
+            <div class="form-group">
+                <label id="loginUsernameLabel">账号</label>
+                <input type="text" id="loginUsername" placeholder="请输入管理员账号" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+            </div>
+            <button onclick="doLogin()" id="loginBtn">登 录</button>
+            <div class="err-msg" id="loginErr"></div>
+            <div class="brand">© 御绳道跳绳馆</div>
+        </div>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div id="loadingOverlay" style="display:none;">
+        <div class="spinner"></div>
+        <div class="text" id="loadingText">正在加载数据...</div>
+        <button class="retry" id="retryBtn" style="display:none;" onclick="location.reload()">重试</button>
+    </div>
+
+    <!-- 提示条 -->
+    <div id="toast"></div>
+
+    <!-- 主页面（登录后显示） -->
+    <div class="container" id="mainPage" style="display:none;">
+        <h1>御绳道跳绳馆 · 教练请假统计系统</h1>
+        <div class="subtitle">数据云端同步保存，所有设备实时共享<span class="cloud-status"><span class="cloud-dot"></span>云端在线</span></div>
+
+        <!-- 用户信息条 -->
+        <div class="user-bar">
+            <div class="user-info">
+                <span id="userRoleBadge" class="role-badge role-admin">管理员</span>
+                👤 <strong id="currentUser">-</strong>
+            </div>
+            <button class="logout-btn" onclick="doLogout()">退出登录</button>
+        </div>
+
+        <!-- 新增请假 -->
+        <div class="box" id="addBox">
+            <div class="title">新增请假登记</div>
+            <div class="row">
+                <select id="name" disabled>
+                    <option value="">请选择教练</option>
+                    <option value="谷新雨">谷新雨</option>
+                    <option value="陈俊坤">陈俊坤</option>
+                    <option value="张培旺">张培旺</option>
+                    <option value="梁治国">梁治国</option>
+                </select>
+                <input type="date" id="date">
+                <select id="type">
+                    <option>事假</option>
+                    <option>病假</option>
+                    <option>赛事公假</option>
+                    <option>培训公假</option>
+                    <option>调休</option>
+                    <option>旷工</option>
+                </select>
+                <select id="time">
+                    <option>上午</option>
+                    <option>下午</option>
+                    <option>全天</option>
+                </select>
+                <input type="text" id="reason" placeholder="请假事由">
+                <button onclick="addData()" id="submitBtn">提交登记</button>
+            </div>
+        </div>
+
+        <!-- 筛选 -->
+        <div class="box" id="filterBox">
+            <div class="title">数据筛选 & 统计</div>
+            <div class="filter-row">
+                <input type="month" id="selMonth" onchange="filterData()">
+                <select id="selCoach" onchange="filterData()">
+                    <option value="all">全部教练</option>
+                </select>
+                <button class="greenBtn" onclick="exportExcel()">导出Excel</button>
+                <button class="grayBtn" id="clearMonthBtn" onclick="clearMonthData()">清空当月记录</button>
+            </div>
+
+            <!-- 统计面板 -->
+            <div class="stat-wrap">
+                <div class="stat-item"><p>事假</p><span id="s1">0</span></div>
+                <div class="stat-item"><p>病假</p><span id="s2">0</span></div>
+                <div class="stat-item"><p>赛事公假</p><span id="s3">0</span></div>
+                <div class="stat-item"><p>培训公假</p><span id="s4">0</span></div>
+                <div class="stat-item"><p>调休</p><span id="s5">0</span></div>
+                <div class="stat-item"><p>旷工</p><span id="s6">0</span></div>
+            </div>
+        </div>
+
+        <!-- 记录列表 -->
+        <div class="box">
+            <div class="title">请假记录台账</div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>姓名</th>
+                            <th>日期</th>
+                            <th>类型</th>
+                            <th>时长</th>
+                            <th>事由</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tb"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== Supabase 配置 =====
+        const SUPABASE_URL = 'https://asywndoeoqzlirxrrkel.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzeXduZG9lb3F6bGlyeHJya2VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzM1NTcsImV4cCI6MjA5ODU0OTU1N30.y1DYUsdDS5vDF_SWvzgWUb57mJ56I8fuLbGL-zyfmSo';
+
+        // 通用请求头
+        const headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Content-Type': 'application/json'
+        };
+
+        let list = [];
+        let nowFilter = [];
+        // 当前会话：{ role: 'admin'|'coach', username, name }
+        let currentSession = null;
+        let currentLoginRole = 'admin'; // 登录页当前选中的角色 tab
+
+        // ===== SHA-256 哈希（用于密码验证） =====
+        async function sha256(text){
+            const buf = new TextEncoder().encode(text);
+            const hash = await crypto.subtle.digest('SHA-256', buf);
+            return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+        }
+
+        // Supabase REST 封装（带超时控制）
+        async function fetchWithTimeout(url, options, timeoutMs){
+            const controller = new AbortController();
+            const timer = setTimeout(()=>controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { ...options, signal: controller.signal });
+                return res;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        const db = {
+            async selectAll(){
+                const res = await fetchWithTimeout(SUPABASE_URL + '/rest/v1/leave_records?select=*&order=date.asc', { method:'GET', headers: headers }, 15000);
+                if(!res.ok) throw new Error('查询失败: HTTP ' + res.status);
+                return await res.json();
+            },
+            async insert(record){
+                const res = await fetchWithTimeout(SUPABASE_URL + '/rest/v1/leave_records', {
+                    method: 'POST',
+                    headers: { ...headers, 'Prefer': 'return=representation' },
+                    body: JSON.stringify(record)
+                }, 15000);
+                if(!res.ok){
+                    let err = '';
+                    try{ err = await res.text(); }catch(e){}
+                    throw new Error('新增失败: HTTP ' + res.status + ' ' + err);
+                }
+                return res.json();
+            },
+            async deleteById(id){
+                const res = await fetchWithTimeout(SUPABASE_URL + '/rest/v1/leave_records?id=eq.' + id, {
+                    method: 'DELETE', headers: headers
+                }, 15000);
+                if(!res.ok) throw new Error('删除失败: HTTP ' + res.status);
+                return true;
+            },
+            async deleteByMonth(monthStr){
+                let [year, month] = monthStr.split('-').map(Number);
+                let monthStart = monthStr + '-01';
+                let nextMonthDate = new Date(year, month, 1);
+                let monthEnd = nextMonthDate.toISOString().slice(0,10);
+                const res = await fetchWithTimeout(
+                    SUPABASE_URL + '/rest/v1/leave_records?date=gte.' + monthStart + '&date=lt.' + monthEnd,
+                    { method: 'DELETE', headers: headers }, 15000
+                );
+                if(!res.ok) throw new Error('清空失败: HTTP ' + res.status);
+                return true;
+            }
+        };
+
+        // ===== 角色切换 Tab =====
+        function switchLoginTab(role){
+            currentLoginRole = role;
+            document.querySelectorAll('.login-tab').forEach(t=>{
+                t.classList.toggle('active', t.dataset.role === role);
+            });
+            const titleEl = document.getElementById('loginTitle');
+            const subEl = document.getElementById('loginSub');
+            const userInput = document.getElementById('loginUsername');
+            if(role === 'admin'){
+                titleEl.textContent = '🔒 管理员登录';
+                subEl.textContent = '御绳道跳绳馆 · 请假统计系统';
+                userInput.placeholder = '请输入管理员账号';
+            } else {
+                titleEl.textContent = '🏃 教练登录';
+                subEl.textContent = '提交请假申请，查看个人记录';
+                userInput.placeholder = '请输入用户名（拼音）';
+            }
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginErr').textContent = '';
+        }
+
+        // ===== 登录入口（根据角色分发） =====
+        async function doLogin(){
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            if(!username || !password){
+                document.getElementById('loginErr').textContent = '请输入账号和密码';
+                return;
+            }
+            if(currentLoginRole === 'admin'){
+                await doAdminLogin(username, password);
+            } else {
+                await doCoachLogin(username, password);
+            }
+        }
+
+        async function doAdminLogin(username, password){
+            const errEl = document.getElementById('loginErr');
+            const btn = document.getElementById('loginBtn');
+            errEl.textContent = '';
+            btn.disabled = true; btn.textContent = '登录中...';
+            try {
+                const passwordHash = await sha256(password);
+                const url = SUPABASE_URL + '/rest/v1/admin_users?username=eq.' + encodeURIComponent(username) + '&password_hash=eq.' + passwordHash + '&select=username';
+                const res = await fetchWithTimeout(url, { method: 'GET', headers: headers }, 15000);
+                if(!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                if(Array.isArray(data) && data.length > 0 && data[0].username === username){
+                    currentSession = { role: 'admin', username, name: username };
+                    sessionStorage.setItem('session', JSON.stringify(currentSession));
+                    showMainPage(currentSession);
+                } else {
+                    errEl.textContent = '账号或密码错误';
+                    btn.disabled = false; btn.textContent = '登 录';
+                }
+            } catch(e){
+                errEl.textContent = '登录失败：' + e.message;
+                btn.disabled = false; btn.textContent = '登 录';
+            }
+        }
+
+        async function doCoachLogin(username, password){
+            const errEl = document.getElementById('loginErr');
+            const btn = document.getElementById('loginBtn');
+            errEl.textContent = '';
+            btn.disabled = true; btn.textContent = '登录中...';
+            try {
+                const passwordHash = await sha256(password);
+                const url = SUPABASE_URL + '/rest/v1/coaches?username=eq.' + encodeURIComponent(username) + '&password_hash=eq.' + passwordHash + '&select=username,name';
+                const res = await fetchWithTimeout(url, { method: 'GET', headers: headers }, 15000);
+                if(!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                if(Array.isArray(data) && data.length > 0){
+                    currentSession = { role: 'coach', username: data[0].username, name: data[0].name };
+                    sessionStorage.setItem('session', JSON.stringify(currentSession));
+                    showMainPage(currentSession);
+                } else {
+                    errEl.textContent = '账号或密码错误';
+                    btn.disabled = false; btn.textContent = '登 录';
+                }
+            } catch(e){
+                errEl.textContent = '登录失败：' + e.message;
+                btn.disabled = false; btn.textContent = '登 录';
+            }
+        }
+
+        function doLogout(){
+            if(!confirm('确定退出登录？')) return;
+            sessionStorage.removeItem('session');
+            currentSession = null;
+            location.reload();
+        }
+
+        // 根据角色应用 UI 权限
+        function applyRolePermissions(){
+            if(!currentSession) return;
+            const isCoach = currentSession.role === 'coach';
+
+            // 角色徽章 + 显示名
+            const badge = document.getElementById('userRoleBadge');
+            if(isCoach){
+                badge.textContent = '教练';
+                badge.className = 'role-badge role-coach';
+            } else {
+                badge.textContent = '管理员';
+                badge.className = 'role-badge role-admin';
+            }
+            document.getElementById('currentUser').textContent = currentSession.name;
+
+            // 教练：自动锁定"教练姓名"为本人
+            const nameSel = document.getElementById('name');
+            if(isCoach){
+                // 找到名为本人姓名的 option 并选中
+                for(const opt of nameSel.options){
+                    if(opt.value === currentSession.name){
+                        opt.selected = true;
+                        break;
+                    }
+                }
+                nameSel.disabled = true;
+            } else {
+                nameSel.disabled = false;
+            }
+
+            // 教练：隐藏"清空当月"按钮
+            document.getElementById('clearMonthBtn').style.display = isCoach ? 'none' : '';
+
+            // 教练：隐藏"全部教练"筛选（他只看自己）
+            const selCoach = document.getElementById('selCoach');
+            if(isCoach){
+                selCoach.value = currentSession.name;
+                selCoach.disabled = true;
+            } else {
+                selCoach.disabled = false;
+            }
+        }
+
+        // 显示主页面（登录成功后）
+        async function showMainPage(session){
+            currentSession = session;
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('mainPage').style.display = 'block';
+            if(window._selMonthInit){
+                document.getElementById('selMonth').value = window._selMonthInit;
+            }
+
+            // 加载数据
+            showLoading('正在从云端加载请假记录...');
+            try {
+                list = await db.selectAll();
+                // 先建好下拉（含教练自己），再应用权限（确保 selCoach.value 不会被丢）
+                updateCoachOption();
+                // 应用角色权限（设置 selCoach 锁定为教练本人）
+                applyRolePermissions();
+                filterData();
+                hideLoading();
+            } catch(e){
+                console.error(e);
+                document.getElementById('loadingText').textContent = '加载失败：' + e.message;
+                document.getElementById('retryBtn').style.display = 'inline-block';
+                showToast('数据加载失败，请检查网络后点击重试', 'error');
+            }
+        }
+
+        // 监听回车键提交登录
+        document.addEventListener('keydown', function(e){
+            if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none'){
+                doLogin();
+            }
+        });
+
+        // 显示提示
+        function showToast(msg, type){
+            let t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = type || '';
+            t.classList.add('show');
+            setTimeout(()=>{ t.classList.remove('show'); }, 2800);
+        }
+
+        // 显示/隐藏加载
+        function showLoading(text){
+            document.getElementById('loadingText').textContent = text || '加载中...';
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        function hideLoading(){
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // 页面加载：检查是否已登录
+        window.onload = function(){
+            let m = new Date();
+            let curMonth = m.getFullYear() + "-" + String(m.getMonth()+1).padStart(2,'0');
+            window._selMonthInit = curMonth;
+
+            const saved = sessionStorage.getItem('session');
+            if(saved){
+                try {
+                    const session = JSON.parse(saved);
+                    if(session && session.role && session.name){
+                        showMainPage(session);
+                        return;
+                    }
+                } catch(e){}
+            }
+            // 未登录
+            document.getElementById('loginPage').style.display = 'flex';
+        }
+
+        // 添加记录
+        async function addData(){
+            let name = document.getElementById('name').value;
+            let date = document.getElementById('date').value;
+            let type = document.getElementById('type').value;
+            let time = document.getElementById('time').value;
+            let reason = document.getElementById('reason').value.trim();
+
+            // 教练：强制用自己姓名（防止绕过）
+            if(currentSession && currentSession.role === 'coach'){
+                name = currentSession.name;
+            }
+
+            if(!name || !date){
+                showToast('请选择教练和日期', 'error');
+                return;
+            }
+
+            let btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+
+            let newRecord = {
+                id: Date.now(),
+                name, date, type, time, reason
+            };
+
+            try {
+                await db.insert(newRecord);
+                list.push(newRecord);
+                if(!currentSession || currentSession.role !== 'coach'){
+                    document.getElementById('name').selectedIndex = 0;
+                }
+                document.getElementById('reason').value = '';
+                updateCoachOption();
+                filterData();
+                showToast('登记成功，已同步至云端', 'success');
+            } catch(e){
+                console.error(e);
+                showToast('提交失败：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '提交登记';
+            }
+        }
+
+        // 更新教练下拉
+        function updateCoachOption(){
+            let arr = [...new Set(list.map(x=>x.name))];
+            // 教练视图：把自己姓名也加入选项（即使没记录也能筛选自己）
+            if(currentSession && currentSession.role === 'coach' && !arr.includes(currentSession.name)){
+                arr.push(currentSession.name);
+            }
+            let sel = document.getElementById('selCoach');
+            let currentVal = sel.value;
+            sel.innerHTML = '<option value="all">全部教练</option>';
+            arr.forEach(n=>{
+                sel.innerHTML += `<option value="${n}">${n}</option>`;
+            });
+            sel.value = currentVal;
+        }
+
+        // 筛选数据
+        function filterData(){
+            let m = document.getElementById('selMonth').value;
+            let c = document.getElementById('selCoach').value;
+            if(!m){
+                nowFilter = [];
+                renderTable();
+                countStat();
+                return;
+            }
+            nowFilter = list.filter(item => {
+                let dateStr = String(item.date).substr(0,7);
+                return dateStr === m;
+            });
+            if(c !== 'all'){
+                nowFilter = nowFilter.filter(x=>x.name === c);
+            }
+            renderTable();
+            countStat();
+        }
+
+        // 渲染表格
+        function renderTable(){
+            let tb = document.getElementById('tb');
+            if(nowFilter.length === 0){
+                tb.innerHTML = '<tr><td colspan="7" class="empty">暂无记录</td></tr>';
+                return;
+            }
+            const isCoach = currentSession && currentSession.role === 'coach';
+            let html = '';
+            nowFilter.forEach((item,idx)=>{
+                const opCell = isCoach ? '<td>-</td>' : `<td><button class="redBtn" onclick="delItem(${item.id})">删除</button></td>`;
+                html += `
+                <tr>
+                    <td>${idx+1}</td>
+                    <td>${item.name}</td>
+                    <td>${String(item.date).substr(0,10)}</td>
+                    <td>${item.type}</td>
+                    <td>${item.time}</td>
+                    <td>${item.reason||'-'}</td>
+                    ${opCell}
+                </tr>
+                `;
+            });
+            tb.innerHTML = html;
+        }
+
+        // 统计数量
+        function countStat(){
+            let a1=a2=a3=a4=a5=a6=0;
+            nowFilter.forEach(x=>{
+                switch(x.type){
+                    case '事假':a1++;break;
+                    case '病假':a2++;break;
+                    case '赛事公假':a3++;break;
+                    case '培训公假':a4++;break;
+                    case '调休':a5++;break;
+                    case '旷工':a6++;break;
+                }
+            });
+            document.getElementById('s1').innerText=a1;
+            document.getElementById('s2').innerText=a2;
+            document.getElementById('s3').innerText=a3;
+            document.getElementById('s4').innerText=a4;
+            document.getElementById('s5').innerText=a5;
+            document.getElementById('s6').innerText=a6;
+        }
+
+        // 删除单条
+        async function delItem(id){
+            if(currentSession && currentSession.role === 'coach'){
+                showToast('教练无删除权限', 'error');
+                return;
+            }
+            if(!confirm('确定删除该条记录？'))return;
+
+            try {
+                await db.deleteById(id);
+                list = list.filter(x=>x.id!==id);
+                updateCoachOption();
+                filterData();
+                showToast('已删除', 'success');
+            } catch(e){
+                console.error(e);
+                showToast('删除失败：' + e.message, 'error');
+            }
+        }
+
+        // 导出Excel
+        function exportExcel(){
+            if(nowFilter.length===0){
+                showToast('无数据可导出', 'error');
+                return;
+            }
+            let data = nowFilter.map((x,i)=>({
+                "序号":i+1,
+                "教练姓名":x.name,
+                "请假日期":String(x.date).substr(0,10),
+                "请假类型":x.type,
+                "时长":x.time,
+                "事由":x.reason||''
+            }));
+            let ws = XLSX.utils.json_to_sheet(data);
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb,ws,"请假记录");
+            XLSX.writeFile(wb,"御绳道教练请假统计表.xlsx");
+        }
+
+        // 清空当月
+        async function clearMonthData(){
+            if(currentSession && currentSession.role === 'coach'){
+                showToast('教练无此权限', 'error');
+                return;
+            }
+            let m = document.getElementById('selMonth').value;
+            if(!m){
+                showToast('请先选择月份', 'error');
+                return;
+            }
+            if(!confirm('确定清空 ' + m + ' 的所有记录？此操作不可恢复！'))return;
+
+            showLoading('正在清空当月记录...');
+            try {
+                await db.deleteByMonth(m);
+                list = list.filter(x=>String(x.date).substr(0,7)!==m);
+                updateCoachOption();
+                filterData();
+                hideLoading();
+                showToast('当月记录已清空', 'success');
+            } catch(e){
+                console.error(e);
+                hideLoading();
+                showToast('清空失败：' + e.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
